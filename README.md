@@ -1,5 +1,5 @@
 
-# Telegram Bot for Task Management
+# Interval Repetition Telegram Bot for Task Management
 
 This is a Telegram bot for managing tasks using the forgetting curve. It's written in Python and uses MongoDB for data storage.
 

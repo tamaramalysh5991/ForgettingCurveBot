@@ -15,6 +15,7 @@ client = MongoClient(
 )
 db = client["telegram_bot_db"]
 users_collection = db["users"]
+tasks_collection = db["tasks"]
 
 
 def add_user(user_id: int, message: Message):

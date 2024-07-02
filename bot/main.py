@@ -38,36 +38,47 @@ async def send_reminder(chat_id, task):
 @dp.message(Command(commands=["add"]))
 async def add_task(message: types.Message):
     try:
-        task_name, *args = message.text.split(' ', 1)[1].split(',')
+        task_name, *args = message.text.split(" ", 1)[1].split(",")
     except IndexError:
         await message.reply(
             "Использование: /add <название задачи>, <дата последнего повторения (сегодня)>, "
-            "<acceptance rate - 1.0 по умолчанию> - название задачи обязательно")
+            "<acceptance rate - 1.0 по умолчанию> - название задачи обязательно"
+        )
         return
 
     task_name = task_name.strip()
-    last_review_date = args[1].strip() if len(args) > 1 else datetime.datetime.now().strftime('%Y-%m-%d')
-    last_review_date = datetime.datetime.strptime(last_review_date, '%Y-%m-%d')
-    acceptance_rate = float(args[2].strip()) if len(args) > 2 else DEFAULT_ACCEPTANCE_RATE
+    last_review_date = (
+        args[0].strip()
+        if len(args) > 1
+        else datetime.datetime.now().strftime("%Y-%m-%d")
+    )
+    last_review_date = datetime.datetime.strptime(last_review_date, "%Y-%m-%d")
+    acceptance_rate = (
+        float(args[1].strip()) if len(args) > 1 else DEFAULT_ACCEPTANCE_RATE
+    )
     next_date = next_review_date(last_review_date, acceptance_rate)
 
     task = {
-        'chat_id': message.chat.id,
-        'name': task_name,
-        'last_review_date': last_review_date,
-        'acceptance_rate': acceptance_rate,
-        'next_review_date': next_date
+        "chat_id": message.chat.id,
+        "name": task_name,
+        "last_review_date": last_review_date,
+        "acceptance_rate": acceptance_rate,
+        "next_review_date": next_date,
     }
 
     tasks_collection.insert_one(task)
-    scheduler.add_job(send_reminder, 'date', run_date=next_date, args=[message.chat.id, task])
-    await message.reply(f"Задача '{task_name}' добавлена. Следующее повторение: {next_date.date()}")
+    scheduler.add_job(
+        send_reminder, "date", run_date=next_date, args=[message.chat.id, task]
+    )
+    await message.reply(
+        f"Задача '{task_name}' добавлена. Следующее повторение: {next_date.date()}"
+    )
 
 
 # Handler for listing tasks
 @dp.message(Command(commands=["list"]))
 async def list_tasks(message: types.Message):
-    tasks = tasks_collection.find({'chat_id': message.chat.id})
+    tasks = tasks_collection.find({"chat_id": message.chat.id})
     response = "Ваши задачи:\n"
     for task in tasks:
         response += f"{task['name']} - Следующее повторение: {task['next_review_date'].date()}\n"
@@ -76,69 +87,81 @@ async def list_tasks(message: types.Message):
 
 @dp.message(Command(commands=["update"]))
 async def update_task(message: types.Message):
-    args = message.text.split(' ', 1)[1].split(',')
+    args = message.text.split(" ", 1)[1].split(",")
     if len(args) < 2:
-        await message.reply("Использование: /update <название задачи>, <acceptance rate>")
+        await message.reply(
+            "Использование: /update <название задачи>, <acceptance rate>"
+        )
         return
     task_name, acceptance_rate = args[0].strip(), float(args[1].strip())
-    task = tasks_collection.find_one({'chat_id': message.chat.id, 'name': task_name})
+    task = tasks_collection.find_one({"chat_id": message.chat.id, "name": task_name})
     if not task:
         await message.reply(f"Задача '{task_name}' не найдена.")
         return
-    last_review_date = task['last_review_date']
+    last_review_date = task["last_review_date"]
     next_date = next_review_date(last_review_date, acceptance_rate)
 
-    tasks_collection.update_one({'_id': task['_id']},
-                                {'$set': {'acceptance_rate': acceptance_rate, 'next_review_date': next_date}})
-    scheduler.add_job(send_reminder, 'date', run_date=next_date, args=[message.chat.id, task])
-    await message.reply(f"Задача '{task_name}' обновлена. Следующее повторение: {next_date.date()}")
+    tasks_collection.update_one(
+        {"_id": task["_id"]},
+        {"$set": {"acceptance_rate": acceptance_rate, "next_review_date": next_date}},
+    )
+    scheduler.add_job(
+        send_reminder, "date", run_date=next_date, args=[message.chat.id, task]
+    )
+    await message.reply(
+        f"Задача '{task_name}' обновлена. Следующее повторение: {next_date.date()}"
+    )
 
 
 @dp.message(Command(commands=["delete"]))
 async def delete_task(message: types.Message):
-    task_name = message.text.split(' ', 1)[1].strip()
-    task = tasks_collection.find_one({'chat_id': message.chat.id, 'name': task_name})
+    task_name = message.text.split(" ", 1)[1].strip()
+    task = tasks_collection.find_one({"chat_id": message.chat.id, "name": task_name})
     if not task:
         await message.reply(f"Задача '{task_name}' не найдена.")
         return
-    tasks_collection.delete_one({'_id': task['_id']})
+    tasks_collection.delete_one({"_id": task["_id"]})
     await message.reply(f"Задача '{task_name}' удалена.")
 
 
 @dp.message(Command(commands=["delete_all"]))
 async def delete_all_tasks(message: types.Message):
-    tasks_collection.delete_many({'chat_id': message.chat.id})
+    tasks_collection.delete_many({"chat_id": message.chat.id})
     await message.reply("Все задачи удалены.")
 
 
 @dp.message(Command(commands=["help"]))
 async def help_command(message: types.Message):
-    response = ("Вы можете использовать следующие команды:\n"
-                "/add <название задачи>, <дата последнего повторения>, <acceptance rate> - Добавить новую задачу\n"
-                "acceptance rate - число от 0 до 1, 1 по умолчанию\n"
-                "Это вероятность, что вы вспомните задачу через определенное количество дней\n"
-                "Чем выше acceptance rate, тем больше вероятность, что вы вспомните задачу\n"
-                "/list - Показать все задачи\n"
-                "/update <название задачи>, <acceptance rate> - Обновить acceptance rate задачи"
-                "/delete <название задачи> - Удалить задачу"
-                "/delete_all - Удалить все задачи")
+    response = (
+        "Вы можете использовать следующие команды:\n"
+        "/add <название задачи>, <дата последнего повторения>, <acceptance rate> - Добавить новую задачу\n"
+        "acceptance rate - число от 0 до 1, 1 по умолчанию\n"
+        "Это вероятность, что вы вспомните задачу через определенное количество дней\n"
+        "Чем выше acceptance rate, тем больше вероятность, что вы вспомните задачу\n"
+        "/list - Показать все задачи\n"
+        "/update <название задачи>, <acceptance rate> - Обновить acceptance rate задачи"
+        "/delete <название задачи> - Удалить задачу"
+        "/delete_all - Удалить все задачи"
+    )
     await message.reply(response)
 
 
 @dp.message(Command(commands=["start"]))
 async def start_command(message: types.Message):
-    response = ("Привет! Я бот для управления задачами с использованием кривой забывания.\n"
-                "Вы можете использовать следующие команды:\n"
-                "/add <название задачи>, <дата последнего повторения>, <acceptance rate> - Добавить новую задачу\n"
-                "/list - Показать все задачи\n"
-                "/update <название задачи>, <acceptance rate> - Обновить acceptance rate задачи"
-                "/delete <название задачи> - Удалить задачу")
+    response = (
+        "Привет! Я бот для управления задачами с использованием кривой забывания.\n"
+        "Вы можете использовать следующие команды:\n"
+        "/add <название задачи>, <дата последнего повторения>, <acceptance rate> - Добавить новую задачу\n"
+        "/list - Показать все задачи\n"
+        "/update <название задачи>, <acceptance rate> - Обновить acceptance rate задачи"
+        "/delete <название задачи> - Удалить задачу"
+    )
     await message.reply(response)
 
 
 @dp.message(Command(commands=["delete_all"]))
 async def delete_all_tasks(message: types.Message):
-    tasks_collection.delete_many({'chat_id': message.chat.id})
+    tasks_collection.delete_many({"chat_id": message.chat.id})
     await message.reply("Все задачи удалены.")
 
 
@@ -147,10 +170,12 @@ async def scheduler_check(message: types.Message):
     # Schedule a task to run in 1 minute
     test_time = datetime.datetime.now() + datetime.timedelta(minutes=1)
     # get last task
-    task = tasks_collection.find_one({'chat_id': message.chat.id})
+    task = tasks_collection.find_one({"chat_id": message.chat.id})
 
     # Add job to scheduler
-    scheduler.add_job(send_reminder, 'date', run_date=test_time, args=[message.chat.id, task])
+    scheduler.add_job(
+        send_reminder, "date", run_date=test_time, args=[message.chat.id, task]
+    )
 
     await message.reply(f"Test task scheduled to run at {test_time}.")
 
@@ -158,13 +183,15 @@ async def scheduler_check(message: types.Message):
 async def send_daily_reminders():
     now = datetime.datetime.now()
     # get all tasks
-    tasks = tasks_collection.find({'next_review_date': {'$lte': now}})
+    tasks = tasks_collection.find({"next_review_date": {"$lte": now}})
     for task in tasks:
-        await send_reminder(task['chat_id'], task)
+        await send_reminder(task["chat_id"], task)
 
 
 def schedule_cron_job():
-    scheduler.add_job(send_daily_reminders, 'cron', hour=8, minute=0)  # Run every day at 8:00 AM
+    scheduler.add_job(
+        send_daily_reminders, "cron", hour=8, minute=0
+    )  # Run every day at 8:00 AM
 
 
 async def main():

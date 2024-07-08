@@ -43,7 +43,7 @@ async def send_reminder(chat_id: str, task: dict):
 @dp.message(Command(commands=["add"]))
 async def add_task(message: types.Message):
     try:
-        task_name, *args = message.text.split(" ", 1)[1].split(",")
+        task_name, *args = message.text.split(",")
     except IndexError:
         await message.reply(
             "Использование: /add <название задачи>, <дата последнего повторения (сегодня)>, "
